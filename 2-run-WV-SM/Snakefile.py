@@ -4,6 +4,7 @@
 
 ''' GLOBAL '''
 import sys
+import os
 
 # Global variables: In theory do not need to be changed
 CURRENT_DIRECTORY = os.getcwd()
@@ -106,8 +107,8 @@ if flag=="case" or flag=="all":
     input_all.append(expand("2-Case/candidate_mutation_table/group_{cladeID}_candidate_mutation_table.npz",cladeID=UNIQ_GROUP_ls))
     # Include the following two lines ONLY if you also want coverage matrices. 
     # Be sure include -c and -n options when py script is called candidate_mutation_table rule and to uncomment the two extra outputs in the candidate_mutation_table rule.
-    # input_all.append(expand("2-Case/candidate_mutation_table/group_{cladeID}_coverage_matrix_raw.pickle.gz",cladeID=UNIQ_GROUP_ls))
-    # input_all.append(expand("2-Case/candidate_mutation_table/group_{cladeID}_coverage_matrix_norm.pickle.gz",cladeID=UNIQ_GROUP_ls))
+    input_all.append(expand("2-Case/candidate_mutation_table/group_{cladeID}_coverage_matrix_raw.npz",cladeID=UNIQ_GROUP_ls))
+    input_all.append(expand("2-Case/candidate_mutation_table/group_{cladeID}_coverage_matrix_norm.npz",cladeID=UNIQ_GROUP_ls))
 if flag=="bracken":
     input_all.append(expand("Kraken/kraken2/{sampleID}_krakenRep.txt",sampleID=SAMPLE_ls))
     input_all.append(expand("Kraken/bracken/{sampleID}.bracken",sampleID=SAMPLE_ls))
@@ -165,7 +166,9 @@ def get_mdl_paths(SID): # returns all list of paths and filenames for a given sa
   
   # path_to_sample_info_csv = 'data/SID/sample_info.csv'
 
-  path_ls, _, _, filename = read_sample_info_CSV(f'data/{SID}/sample_info.csv')
+  SID = SID.strip()
+  path = 'data/' + SID + '/sample_info.csv'
+  path_ls, _, _, filename = read_sample_info_CSV(path)
   # is_sample = [int(i == SID) for i in SAMPLE_ls] # boolean which is true when sample_ls == SID
   # pathstr = list(compress(PATH_ls,is_sample)) # list of paths
   # path_ls = pathstr.split(' ')
@@ -201,11 +204,11 @@ rule cutadapt:
       # NEEDS TO BE OF FORMAT FILENAMER1, FILENAMER2, NOITHING ELSE
       "cutadapt -a CTGTCTCTTAT --cores=4 "
                "-o {output.fq1o} "
-               "{wildcards.path_to_raw_data}{wildcards.fn}R1.fastq.gz "
+               "{wildcards.path_to_raw_data}{wildcards.fn}_1_sequence.fastq "
                "1> {params.manifest} ;"
       "cutadapt -a CTGTCTCTTAT --cores=4 "
                "-o {output.fq2o} "
-               "{wildcards.path_to_raw_data}{wildcards.fn}R2.fastq.gz "
+               "{wildcards.path_to_raw_data}{wildcards.fn}_2_sequence.fastq "
                "1>> {params.manifest} ;"
 
 rule sickle:
@@ -268,8 +271,15 @@ else:
           subprocess.run(f"zcat {fwdstr} | gzip > data/{wildcards.sampleID}/R1.filt.fq.gz", shell=True)
           subprocess.run(f"zcat {revstr} | gzip > data/{wildcards.sampleID}/R2.filt.fq.gz", shell=True)
         else: # otherwise, just make a link
-          subprocess.run(f"ln -s -T {input.fwd} data/{wildcards.sampleID}/R1.filt.fq.gz", shell=True)
-          subprocess.run(f"ln -s -T {input.rev} data/{wildcards.sampleID}/R2.filt.fq.gz", shell=True)
+          print(input.fwd)
+          print(input.rev)
+          print(wildcards.sampleID)
+        #   subprocess.run(f"ln {input.fwd[0]} data/{wildcards.sampleID}/R1.filt.fq.gz", shell=True)
+        #   subprocess.run(f"ln {input.rev[0]} data/{wildcards.sampleID}/R2.filt.fq.gz", shell=True)
+          dest_r1 = 'data/' + wildcards.sampleID + '/R1.filt.fq.gz'
+          dest_r2 = 'data/' + wildcards.sampleID + '/R2.filt.fq.gz'
+          os.link(str(input.fwd), str(dest_r1))
+          os.link(str(input.rev), str(dest_r2))
 
     # rule make_data_links:
     #   # NOTE: All raw data needs to be names fastq.gz. No fq! The links will be names fq though.
@@ -331,7 +341,8 @@ if flag=="mapping" or flag=="all":
             "envs/bowtie2.yaml"
         shell:
             # 8 threads coded into json
-            "bowtie2 --threads 8 -X 2000 --no-mixed --no-unal --dovetail -x {params.refGenome} -1 {input.fq1} -2 {input.fq2} -S {output.samA} 2> {log} "
+            "bowtie2 --threads 8 --no-mixed --no-unal --dovetail -x {params.refGenome} -1 {input.fq1} -2 {input.fq2} -S {output.samA} 2> {log} "
+            # "bowtie2 --threads 8 -X 2000 --no-mixed --no-unal --dovetail -x {params.refGenome} -1 {input.fq1} -2 {input.fq2} -S {output.samA} 2> {log} "
 
 
     # Runs a QC script to summarize results of bowtie2 mapping
@@ -422,10 +433,10 @@ if flag=="mapping" or flag=="all":
         shadow: 
             "minimal", # avoids leaving leftover temp files esp if job aborted
         shell:
-            " samtools mpileup -q30 -x -s -O -d3000 -f {params.ref} {input.bamA} > {output.pileup} ;" 
-            " samtools mpileup -q30 -t SP -d3000 -vf {params.ref} {input.bamA} > {params.vcf_raw} ;"
+            " samtools mpileup -q30 -x -s -O -d5000 -f {params.ref} {input.bamA} > {output.pileup} ;" 
+            " samtools mpileup -q30 -t SP -d5000 -vf {params.ref} {input.bamA} > {params.vcf_raw} ;"
             " bcftools call -c -Oz -o {output.vcf_strain} {params.vcf_raw} ;"
-            " bcftools view -Oz -v snps -q .75 {output.vcf_strain} > {output.variants} ;"
+            " bcftools view -Oz -v snps -q .1 {output.vcf_strain} > {output.variants} ;"
             " tabix -p vcf {output.variants} ;"
             " rm {params.vcf_raw}"
 
@@ -562,118 +573,3 @@ if flag=="case" or flag=="all":
             # Use this version if you do want coverage matrices (-c for raw coverage matrix; -n for normalized coverage matrix)
              "python3 {SCRIPTS_DIRECTORY}/build_candidate_mutation_table.py -p {input.positions} -s {input.string_sampleID_names} -g {input.string_outgroup_bool} -q {input.string_quals} -d {input.string_diversity} -o {output.cmt} -c {output.cov_raw} -n {output.cov_norm} ;"
 
-
-
-# ASSEMBLY STEP ####################################################################################################
-# Generates an annotated genome assembly reads from each sample
-
-
-if flag=="assembly":
-
-
-    # Assemble a genome from reads from a given sample using SPAdes
-    rule spades:
-        input:
-          fastq1=rules.sickle2050.output.fq1o,
-          fastq2=rules.sickle2050.output.fq2o,
-        params:
-          outdir="Assembly/spades/{sampleID}"
-        conda:
-          "envs/spades.yaml"
-        threads: 16
-        output:
-          fasta="Assembly/spades/{sampleID}/contigs.fasta", # produced by spades''
-        shell:
-          "spades.py -m 500 -k 21,33,55,77 --phred-offset 33 --careful -t {threads} -1 {input.fastq1} -2 {input.fastq2} -o {params.outdir}"
-
-
-    # Annotate assembly using prokka
-    rule prokka:
-      input:
-          rules.spades.output.fasta,
-      params:
-          outdir="Assembly/prokka/{sampleID}",
-      threads: 16
-      output:
-          txt="Assembly/prokka/{sampleID}/prokka_out.txt",
-          faa="Assembly/prokka/{sampleID}/prokka_out.faa",
-      conda:
-          "envs/prokka.yml"
-      shell:
-          "prokka --compliant --force --cpus {threads} --outdir {params.outdir} --prefix prokka_out {input} ; conda deactivate"
-
-
-
-    # Get two-column (caldeID,path2faa) input file for ortholog_inference script
-    rule build_annotation_orthologs_input:
-        input:
-            prokka_faa=expand("Assembly/prokka/{sampleID}/prokka_out.faa",sampleID=SAMPLE_ls_long),
-        params:
-            clade_identifier=expand("{sampleID}",sampleID=SAMPLE_ls_long),
-        output:
-            "Assembly/orthologinfo_filtered/input_files.tsv",
-        shell:
-            """
-            paste <(echo {params.clade_identifier} | scripts/sed_nl.sh ) <(echo {input.prokka_faa} | scripts/sed_nl.sh ) > {output}
-            """
-
-    # Infer ortholog info for each identified gene (based on AA sequence) across all clades using CD-HIT
-    rule infer_orthologs:
-        input:
-            rules.build_annotation_orthologs_input.output
-        params:
-            percent_identity="0.9", # percent identity for clustering
-            cdhit_mem="8000", # max mem available for cdhit
-            output_folder="Assembly/orthologinfo_filtered/"
-        output:
-            "Assembly/orthologinfo_filtered/annotation_orthologs.tsv"
-        shell:
-            "python3 scripts/annotation_orthologs_inference.py -f {input} -p {params.percent_identity} -m {params.cdhit_mem} -o {params.output_folder}"
-
-
-
-# KRAKEN/BRACKEN ####################################################################################################
-# Estimates abundance of taxa in each sample using kraken/breacken
-
-
-if flag=="bracken":
-
-
-    # Turn fastq files into fasta files
-    rule FQ2FA:
-      input:
-          fq1o = rules.sickle2050.output.fq1o,
-      output:
-          fa1o="tmp/{sampleID}_1.fa",
-      shell:
-          # set +o pipefail; necessary to prevent pipefail (zcat runs but head is done)
-          "set +o pipefail; "
-          "gzip -cd {input.fq1o} | scripts/fq2fa_sed.sh /dev/stdin > {output.fa1o} ;"
-
-
-    # Run kraken (on forward read file only)
-    rule kraken2:
-      input:
-          fa1o = rules.FQ2FA.output.fa1o, # assessment based only on fwd reads
-      output:
-          kraken_report="Kraken/kraken2/{sampleID}_krakenRep.txt",
-          seq_results="Kraken/kraken2/{sampleID}_krakSeq.txt.gz",
-      conda:
-          "envs/crack.yml",
-      shell:
-          "kraken2 --threads 20 "
-          "--db /scratch/mit_lieberman/tools/databases/kraken2/ {input} "
-          "--report {output.kraken_report} |gzip > {output.seq_results} "
-
-
-    # Run bracken
-    rule bracken:
-      input:
-          kraken_report = rules.kraken2.output.kraken_report,
-      output:
-          bracken_rep="Kraken/bracken/{sampleID}.bracken",
-      conda:
-          "envs/crack.yml",
-      shell:
-          "scripts/bracken -d /scratch/mit_lieberman/tools/databases/jsb_AllClades/AllClades -i {input.kraken_report} -o {output.bracken_rep} -l S"
-    

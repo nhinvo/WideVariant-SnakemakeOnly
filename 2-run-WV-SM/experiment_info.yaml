@@ -1,0 +1,4 @@
+experiment_name: "Experiment Name WV Snakemake Run"
+sample_table: ./samples.csv
+myscripts_directory: ./scripts
+ref_genome_directory: ref_genomes

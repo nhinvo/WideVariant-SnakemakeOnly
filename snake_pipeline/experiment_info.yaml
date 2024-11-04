@@ -1,4 +1,0 @@
-experiment_name: "test"
-sample_table: ./samples.csv
-myscripts_directory: ./scripts
-ref_genome_directory: /nfs/tamilab001/c3ddb-scratch-mit_lieberman/reference_genomes
