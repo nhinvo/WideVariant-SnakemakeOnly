@@ -2,7 +2,9 @@
 Snakemake Pipeline for Variant Calling from Lieberman Lab + custom parsing and plotting scripts
 
 ## Outputs: 
-<img src="images/genome-pos.png" alt="Genome Variant" style="width:50%;">
+<p align="center">
+  <img src="images/genome-pos.png" alt="Genome Variant" style="width:50%;">
+</p>
 
 <p align="center">
   <img src="images/pos_10777_M4-A1A.png" width="40%" />
